@@ -23,6 +23,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -44,10 +45,10 @@ public class CalculateAverage_0xshivamagarwal {
         return v1;
     }
 
-    private static String toString(final Map.Entry<String, long[]> entry) {
+    private static String toString(final Map.Entry<ByteArray, long[]> entry) {
         var m = entry.getValue();
 
-        return entry.getKey()
+        return entry.getKey().toString()
                 + '='
                 + m[0] / 10.0
                 + '/'
@@ -56,9 +57,8 @@ public class CalculateAverage_0xshivamagarwal {
                 + m[1] / 10.0;
     }
 
-    private static Map<String, long[]> parseData(
-                                                 final MemorySegment data, long offset, final long limit) {
-        var map = new HashMap<String, long[]>(10000, 1);
+    private static Map<ByteArray, long[]> parseData(final MemorySegment data, long offset, final long limit) {
+        var map = new HashMap<ByteArray, long[]>(10240, 1);
         var sep = false;
         var neg = false;
         var key = new byte[100];
@@ -71,7 +71,7 @@ public class CalculateAverage_0xshivamagarwal {
                 if (b == NEW_LINE) {
                     val = neg ? -val : val;
                     map.merge(
-                            new String(key, 0, len),
+                            new ByteArray(key, len),
                             new long[]{ val, val, val, 1 },
                             CalculateAverage_0xshivamagarwal::mergeFn);
                     sep = false;
@@ -100,8 +100,7 @@ public class CalculateAverage_0xshivamagarwal {
     public static void main(String[] args) throws IOException {
         final String result;
 
-        try (var channel = FileChannel.open(FILE, READ);
-                var arena = Arena.ofShared()) {
+        try (var channel = FileChannel.open(FILE, READ); var arena = Arena.ofShared()) {
             var data = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size(), arena);
             var chunkSize = data.byteSize() / NO_OF_THREADS;
             var chunks = new long[NO_OF_THREADS + 1];
@@ -133,5 +132,59 @@ public class CalculateAverage_0xshivamagarwal {
         }
 
         System.out.println(result);
+    }
+
+    private static class ByteArray implements Comparable<ByteArray> {
+        private static final int BYTE = 0xFF;
+        private final byte[] chars;
+        private final int length;
+        private final int hashCode;
+
+        public ByteArray(final byte[] chars) {
+            this(chars, chars.length);
+        }
+
+        public ByteArray(final byte[] chars, final int length) {
+            this.length = length;
+            this.chars = new byte[length];
+            System.arraycopy(chars, 0, this.chars, 0, length);
+            this.hashCode = Arrays.hashCode(this.chars);
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || this.getClass() != obj.getClass()) {
+                return false;
+            }
+            return Arrays.equals(this.chars, ((ByteArray) obj).chars);
+        }
+
+        @Override
+        public String toString() {
+            return new String(chars, 0, length);
+        }
+
+        @Override
+        public int compareTo(ByteArray obj) {
+            var l = Math.min(this.length, obj.length);
+
+            for (var i = 0; i < l; ++i) {
+                var x = BYTE & this.chars[i];
+                var y = BYTE & obj.chars[i];
+                if (x != y) {
+                    return x < y ? -1 : 1;
+                }
+            }
+
+            return Integer.compare(this.length, obj.length);
+        }
     }
 }
